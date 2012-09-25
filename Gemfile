@@ -10,6 +10,7 @@ source "http://rubygems.org"
   gem 'ruby-debug19'
 
 group :development do
+  gem 'ruby-debug19'
   gem 'pg'
   gem 'postgres'
   gem 'rspec'
