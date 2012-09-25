@@ -1,8 +1,16 @@
+require 'sinatra'
 require 'sinatra/base'
+require 'sinatra/activerecord'
 require 'active_support'
 require 'active_record'
 require 'delayed_job'
 require 'haml'
+require 'pg'
+require 'ruby-debug19'
+
+class Delayed::Job < ActiveRecord::Base
+  set :database, 'postgresql:///contently'
+end
 
 class DelayedJobWeb < Sinatra::Base
   set :root, File.dirname(__FILE__)
@@ -152,5 +160,5 @@ end
 
 # Run the app!
 #
-# puts "Hello, you're running delayed_job_web"
-# DelayedJobWeb.run!
+puts "Hello, you're running delayed_job_web"
+DelayedJobWeb.run!

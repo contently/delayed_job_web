@@ -1,7 +1,9 @@
 # encoding: utf-8
-
 require 'rubygems'
 require 'bundler'
+require 'sinatra/activerecord/rake'
+require './app'
+
 begin
   Bundler.setup(:default, :development)
 rescue Bundler::BundlerError => e
