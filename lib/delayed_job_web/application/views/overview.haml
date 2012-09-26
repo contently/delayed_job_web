@@ -22,4 +22,17 @@
     %td.status
       %a{:href => u('/failed')} Failed Jobs
     %td= delayed_jobs(:failed).count
+%h1
+  Queues
+%p.sub
+  Jobs by Queue
+%table.overview
+  %tr
+    %th Queue
+    %th Count
+  - queues.each do |q|
+    %tr
+      %td.status
+        %a{:href => u("/queue/#{q}")}= "#{q.split("_").map(&:capitalize).join(" ")}"
+      %td= delayed_job.where(:queue=>q).count
 = poll

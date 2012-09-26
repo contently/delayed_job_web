@@ -1,4 +1,3 @@
-require 'rubygems'
 require 'sinatra'
 require 'sinatra/base'
 require 'sinatra/activerecord'
@@ -7,18 +6,33 @@ require 'active_record'
 require 'delayed_job'
 require 'haml'
 require 'pg'
-require 'ruby-debug19'
 
-class Delayed::Job < ActiveRecord::Base
+# Need to specify this in a YAML config somewhere
+# We want to be able to access jobs remotely/seperate from main app.
+class Delayed_Job < ActiveRecord::Base
+  include Delayed::Backend::Base
   set :database, 'postgresql:///contently'
+
+  def description
+    details = {}
+    parsed_handler = self.handler.split(/\n/)
+    parsed_handler.map{|x| details[x.split(":")[0].strip.split(/\//).last] = x.split(/\:|\/|\s/).last.strip unless x.blank?}
+    target_class = details["ActiveRecord"]
+    target_id = details["id"].to_s.gsub(/\W/,"").to_i if details["id"].present?
+    performable_class = details["object"] if details["object"].present?
+    performable_method = details["method_name"] if details["method_name"].present?
+    return "Perform #{performable_class}:#{performable_method} on #{target_class}##{target_id}"
+  end
 end
 
 class DelayedJobWeb < Sinatra::Base
+  set :database, 'postgresql:///contently'
   set :root, File.dirname(__FILE__)
   set :static, true
   set :public_folder,  File.expand_path('../public', __FILE__)
   set :views,  File.expand_path('../views', __FILE__)
   set :haml, { :format => :html5 }
+  register Sinatra::ActiveRecordExtension
 
   def current_page
     url_path request.path_info.sub('/','')
@@ -29,7 +43,7 @@ class DelayedJobWeb < Sinatra::Base
   end
 
   def per_page
-    20
+    25
   end
 
   def url_path(*path_parts)
@@ -41,20 +55,9 @@ class DelayedJobWeb < Sinatra::Base
     request.env['SCRIPT_NAME']
   end
 
-  def tabs
-    [
-      {:name => 'Overview', :path => '/overview'},
-      {:name => 'Enqueued', :path => '/enqueued'},
-      {:name => 'Working', :path => '/working'},
-      {:name => 'Pending', :path => '/pending'},
-      {:name => 'Failed', :path => '/failed'},
-      {:name => 'Stats', :path => '/stats'}
-    ]
-  end
-
   def delayed_job
     begin
-      Delayed::Job
+      Delayed_Job
     rescue
       false
     end
@@ -73,6 +76,18 @@ class DelayedJobWeb < Sinatra::Base
     haml :stats
   end
 
+  def tabs
+    [
+      {:name => 'Overview', :path => '/overview'},
+      {:name => 'Enqueued', :path => '/enqueued'},
+      {:name => 'Working', :path => '/working'},
+      {:name => 'Pending', :path => '/pending'},
+      {:name => 'Failed', :path => '/failed'},
+      {:name => 'Stats', :path => '/stats'}
+    ]
+  end
+
+  #Static Page Rendering
   %w(enqueued working pending failed).each do |page|
     get "/#{page}" do
       @jobs = delayed_jobs(page.to_sym).order('created_at desc, id desc').offset(start).limit(per_page)
@@ -81,25 +96,25 @@ class DelayedJobWeb < Sinatra::Base
     end
   end
 
-  get "/remove/:id" do
-    delayed_job.find(params[:id]).delete
-    redirect back
+  #Polling Page Rendering
+  %w(overview enqueued working pending failed stats) .each do |page|
+    get "/#{page}.poll" do
+      show_for_polling(page)
+    end
+
+    get "/#{page}/:id.poll" do
+      show_for_polling(page)
+    end
   end
 
-  get "/requeue/:id" do
-    job = delayed_job.find(params[:id])
-    job.update_attributes(:run_at => Time.now, :failed_at => nil)
-    redirect back
+  def queues
+    delayed_job.select(:queue).map(&:queue).uniq.sort
   end
 
-  post "/failed/clear" do
-    delayed_job.destroy_all(delayed_job_sql(:failed))
-    redirect u('failed')
-  end
-
-  post "/requeue/all" do
-    delayed_jobs(:failed).update_all(:run_at => Time.now, :failed_at => nil)
-    redirect back
+  get "/queue/:queue" do
+    @jobs = delayed_job.where(:queue=>params[:queue]).order('created_at desc, id desc').offset(start).limit(per_page)
+    @all_jobs = delayed_job.where(:queue=>params[:queue]).count
+    haml :queue
   end
 
   def delayed_jobs(type)
@@ -130,16 +145,6 @@ class DelayedJobWeb < Sinatra::Base
     @partial = false
   end
 
-  %w(overview enqueued working pending failed stats) .each do |page|
-    get "/#{page}.poll" do
-      show_for_polling(page)
-    end
-
-    get "/#{page}/:id.poll" do
-      show_for_polling(page)
-    end
-  end
-
   def poll
     if @polling
       text = "Last Updated: #{Time.now.strftime("%H:%M:%S")}"
@@ -157,9 +162,30 @@ class DelayedJobWeb < Sinatra::Base
     haml(page.to_sym, {:layout => false})
   end
 
+  ################################## ACTIONS ################################
+  get "/remove/:id" do
+    delayed_job.find(params[:id]).delete
+    redirect back
+  end
+
+  get "/requeue/:id" do
+    job = delayed_job.find(params[:id])
+    job.update_attributes(:run_at => Time.now, :failed_at => nil)
+    redirect back
+  end
+
+  post "/failed/clear" do
+    delayed_job.destroy_all(delayed_job_sql(:failed))
+    redirect u('failed')
+  end
+
+  post "/requeue/all" do
+    delayed_job.where("last_error IS NOT NULL").update_all(:run_at => Time.now, :failed_at => nil)
+    redirect back
+  end
+  ############################################################################
+
 end
 
 # Run the app!
-#
-puts "Hello, you're running delayed_job_web"
 DelayedJobWeb.run!

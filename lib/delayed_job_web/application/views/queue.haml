@@ -1,0 +1,11 @@
+%h1="#{params[:queue].split("_").map(&:capitalize).join(" ")}"
+- if @jobs.any?
+  %form{:method => 'POST', :action => u('requeue/all')}
+    %input{:type => 'submit', :value => 'Enqueue All Immediately'}
+%p.sub
+  The list below contains jobs in the #{params[:queue].split("_").map(&:capitalize).join(" ")} queue.
+%p.sub= "Showing #{start} to #{start + per_page} of #{@all_jobs} pending jobs."
+%ul.job
+  - @jobs.each do |job|
+    = partial :job, {:job => job}
+= partial :next_more, :start => start, :total_size => @all_jobs, :per_page => per_page
