@@ -1,7 +1,7 @@
 %h1
   Overview
 %p.sub
-  The list below shows an overview of the jobs in the delayed_job queue.
+  Jobs in the delayed_job queue.
 %table.overview
   %tr
     %th Status
@@ -30,9 +30,17 @@
   %tr
     %th Queue
     %th Count
+    %th Priority
+    %th Working
+    %th Pending
+    %th Failed
   - queues.each do |q|
     %tr
       %td.status
         %a{:href => u("/queue/#{q}")}= "#{q.split("_").map(&:capitalize).join(" ")}"
       %td= delayed_job.where(:queue=>q).count
+      %td= delayed_job.where(:queue=>q).select(:priority).map(&:priority).uniq.sort.join(", ")
+      %td= delayed_job.where(:queue=>q).where("locked_at IS NOT NULL").count
+      %td= delayed_job.where(:queue=>q).where("locked_at IS NULL AND last_error IS NULL").count
+      %td{:style => "color:red;"}= delayed_job.where(:queue=>q).where("last_error IS NOT NULL").count
 = poll

@@ -33,6 +33,11 @@ class DelayedJobWeb < Sinatra::Base
   set :views,  File.expand_path('../views', __FILE__)
   set :haml, { :format => :html5 }
   register Sinatra::ActiveRecordExtension
+ 
+  #Set in YAML file and pass in here via ENV variables?
+  DB_PATH = ""
+  RAILS_APP_PATH = ""
+  RAILS_LOG_PATH = ""
 
   def current_page
     url_path request.path_info.sub('/','')
@@ -170,18 +175,31 @@ class DelayedJobWeb < Sinatra::Base
 
   get "/requeue/:id" do
     job = delayed_job.find(params[:id])
-    job.update_attributes(:run_at => Time.now, :failed_at => nil)
+    job.update_attributes(:run_at =>Time.now,:failed_at=>nil,:locked_at=>nil,:attempts=>0)
     redirect back
   end
 
   post "/failed/clear" do
-    delayed_job.destroy_all(delayed_job_sql(:failed))
-    redirect u('failed')
+    delayed_job.where("last_error IS NOT NULL").destroy_all
+    redirect back
   end
 
   post "/requeue/all" do
-    delayed_job.where("last_error IS NOT NULL").update_all(:run_at => Time.now, :failed_at => nil)
+    delayed_job.where("last_error IS NOT NULL").update_all(
+      :run_at=>Time.now,
+      :failed_at => nil,
+      :attempts=>0,
+      :last_error=>nil,
+      :locked_at=>nil)
     redirect back
+  end
+
+  get '/update/:id' do
+    "#{params[:id]}"
+  end
+
+  post '/update/all' do
+    "#{params}"
   end
   ############################################################################
 
