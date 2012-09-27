@@ -23,22 +23,28 @@ class Delayed_Job < ActiveRecord::Base
     performable_method = details["method_name"] if details["method_name"].present?
     return "Perform #{performable_class}:#{performable_method} on #{target_class}##{target_id}"
   end
+
+  def queues
+    delayed_job.select(:queue).map(&:queue).uniq.sort
+  end
 end
 
 class DelayedJobWeb < Sinatra::Base
-  set :database, 'postgresql:///contently'
   set :root, File.dirname(__FILE__)
   set :static, true
   set :public_folder,  File.expand_path('../public', __FILE__)
   set :views,  File.expand_path('../views', __FILE__)
   set :haml, { :format => :html5 }
-  register Sinatra::ActiveRecordExtension
- 
-  #Set in YAML file and pass in here via ENV variables?
-  DB_PATH = ""
-  RAILS_APP_PATH = ""
-  RAILS_LOG_PATH = ""
 
+  def delayed_job
+    begin
+      Delayed_Job
+    rescue
+      false
+    end
+  end
+
+  ############################## SINTRA APP ################################
   def current_page
     url_path request.path_info.sub('/','')
   end
@@ -60,67 +66,6 @@ class DelayedJobWeb < Sinatra::Base
     request.env['SCRIPT_NAME']
   end
 
-  def delayed_job
-    begin
-      Delayed_Job
-    rescue
-      false
-    end
-  end
-
-  get '/overview' do
-    if delayed_job
-      haml :overview
-    else
-      @message = "Unable to connected to Delayed::Job database"
-      haml :error
-    end
-  end
-
-  get '/stats' do
-    haml :stats
-  end
-
-  def tabs
-    [
-      {:name => 'Overview', :path => '/overview'},
-      {:name => 'Enqueued', :path => '/enqueued'},
-      {:name => 'Working', :path => '/working'},
-      {:name => 'Pending', :path => '/pending'},
-      {:name => 'Failed', :path => '/failed'},
-      {:name => 'Stats', :path => '/stats'}
-    ]
-  end
-
-  #Static Page Rendering
-  %w(enqueued working pending failed).each do |page|
-    get "/#{page}" do
-      @jobs = delayed_jobs(page.to_sym).order('created_at desc, id desc').offset(start).limit(per_page)
-      @all_jobs = delayed_jobs(page.to_sym)
-      haml page.to_sym
-    end
-  end
-
-  #Polling Page Rendering
-  %w(overview enqueued working pending failed stats) .each do |page|
-    get "/#{page}.poll" do
-      show_for_polling(page)
-    end
-
-    get "/#{page}/:id.poll" do
-      show_for_polling(page)
-    end
-  end
-
-  def queues
-    delayed_job.select(:queue).map(&:queue).uniq.sort
-  end
-
-  get "/queue/:queue" do
-    @jobs = delayed_job.where(:queue=>params[:queue]).order('created_at desc, id desc').offset(start).limit(per_page)
-    @all_jobs = delayed_job.where(:queue=>params[:queue]).count
-    haml :queue
-  end
 
   def delayed_jobs(type)
     delayed_job.where(delayed_job_sql(type))
@@ -137,10 +82,6 @@ class DelayedJobWeb < Sinatra::Base
     when :pending
       'attempts = 0'
     end
-  end
-
-  get "/?" do
-    redirect u(:overview)
   end
 
   def partial(template, local_vars = {})
@@ -167,7 +108,61 @@ class DelayedJobWeb < Sinatra::Base
     haml(page.to_sym, {:layout => false})
   end
 
-  ################################## ACTIONS ################################
+  ####################### SINATRA ROUTES/ACTIONS ##########################
+  def tabs
+    [
+      {:name => 'Overview', :path => '/overview'},
+      {:name => 'Enqueued', :path => '/enqueued'},
+      {:name => 'Working', :path => '/working'},
+      {:name => 'Pending', :path => '/pending'},
+      {:name => 'Failed', :path => '/failed'},
+      {:name => 'Stats', :path => '/stats'}
+    ]
+  end
+
+  get "/?" do
+    redirect u(:overview)
+  end
+
+  #Static Page Rendering
+  %w(enqueued working pending failed).each do |page|
+    get "/#{page}" do
+      @jobs = delayed_jobs(page.to_sym).order('created_at desc, id desc').offset(start).limit(per_page)
+      @all_jobs = delayed_jobs(page.to_sym)
+      haml page.to_sym
+    end
+  end
+
+  #Polling Page Rendering
+  %w(overview enqueued working pending failed stats) .each do |page|
+    get "/#{page}.poll" do
+      show_for_polling(page)
+    end
+
+    get "/#{page}/:id.poll" do
+      show_for_polling(page)
+    end
+  end
+
+  get '/overview' do
+    if delayed_job
+      haml :overview
+    else
+      @message = "Unable to connected to Delayed::Job database"
+      haml :error
+    end
+  end
+
+  get '/stats' do
+    haml :stats
+  end
+
+  get "/queue/:queue" do
+    @jobs = delayed_job.where(:queue=>params[:queue]).order('created_at desc, id desc').offset(start).limit(per_page)
+    @all_jobs = delayed_job.where(:queue=>params[:queue]).count
+    haml :queue
+  end
+
   get "/remove/:id" do
     delayed_job.find(params[:id]).delete
     redirect back
@@ -201,8 +196,6 @@ class DelayedJobWeb < Sinatra::Base
   post '/update/all' do
     "#{params}"
   end
-  ############################################################################
-
 end
 
 # Run the app!

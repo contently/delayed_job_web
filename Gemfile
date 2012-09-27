@@ -6,11 +6,10 @@ source "http://rubygems.org"
   gem 'delayed_job'
   gem 'rdoc'
   gem 'pg'
+  #gem 'request-log-analyzer'
 
 group :development do
-  gem 'ruby-debug19'
   gem "pry"
-  gem "pry-remote"
   gem 'rspec'
   gem "shoulda"
   gem "bundler"

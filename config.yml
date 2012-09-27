@@ -1,0 +1,12 @@
+# Pass the ActiveRecord Connection config settings from here
+application:
+  name: Contently Jobs #optional
+  username:            #optional, highly recommended
+  password:            #optional, highly recommended
+database:
+  adapter: postgresql
+  encoding: utf8
+  database: contently
+  username: 
+  password: 
+  template: template0 # Required for UTF8 encoding
